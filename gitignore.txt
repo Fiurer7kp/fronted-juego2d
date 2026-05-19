@@ -1,0 +1,68 @@
+# =====================================================
+#  Ashen Crown — .gitignore
+#  Coloca este archivo en la raíz del proyecto:
+#  Proyecto_AshenCrown/.gitignore
+# =====================================================
+
+# ── Backend Java / Maven ───────────────────────────
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/**/*.class
+backend/**/*.jar
+backend/**/*.war
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# ── Contraseñas y configuración sensible ───────────
+# IMPORTANTE: nunca subas application.properties con tu contraseña real
+# Renómbralo a application.properties.example antes de subir
+backend/src/main/resources/application.properties
+
+# ── Frontend Node.js ───────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.local
+
+# ── Variables de entorno ───────────────────────────
+.env
+.env.local
+.env.development
+.env.production
+**/.env
+
+# ── Logs ───────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Assets binarios pesados (NO subir a GitHub) ───
+# Los assets del juego (películas, música, etc.) son demasiado grandes
+# para GitHub. Mantenlos solo en local.
+frontend/src/assets/Movies/
+frontend/src/assets/Music/
+frontend/src/assets/Sound Effects/
+frontend/src/assets/Backgrounds/
+frontend/src/assets/Accessories/
+frontend/src/assets/App Icons/
+frontend/src/assets/Character Art + Sprites/
+frontend/src/assets/Voices [English]/
+frontend/src/assets/Voices [Japanese]/
+frontend/src/assets/Weapon Sprites/
+frontend/src/assets/Maps/Story/
+frontend/src/assets/UI/
+frontend/src/assets/characters/
+
+# ── Sistema operativo ──────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── VSCode ─────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+# Mantener .vscode/tasks.json si lo usas para compartir configuración
