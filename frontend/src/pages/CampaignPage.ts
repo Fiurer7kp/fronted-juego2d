@@ -146,7 +146,7 @@ export class CampaignPage {
       btn.disabled = true;
 
       // Precarga el estado del juego mientras el usuario ve la cutscene
-      let initialState;
+      let initialState: import('../services/GameService').GameState | undefined;
       try {
         initialState = await GameService.newGame(this.selectedLevel.id);
       } catch { /* backend offline — GamePage usa fallback */ }
