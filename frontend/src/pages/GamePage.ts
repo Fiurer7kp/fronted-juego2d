@@ -111,22 +111,22 @@ function dist(a: Position, b: Position) {
 
 // ── Mapa de imágenes por nivel (14 niveles) ───────────────────────────────────
 const LEVEL_MAP_IMAGES: Record<string, string> = {
-  'level-1':  '/src/assets/Maps/Story/S0101.png',
-  'level-2':  '/src/assets/Maps/Story/S0201.png',
-  'level-3':  '/src/assets/Maps/Story/S0401.png',
-  'level-4':  '/src/assets/Maps/Story/S0501.png',
-  'level-5':  '/src/assets/Maps/Story/S0601.png',
-  'level-6':  '/src/assets/Maps/Story/S0701.png',
-  'level-7':  '/src/assets/Maps/Story/S0901.png',
-  'level-8':  '/src/assets/Maps/Story/S0102.png',
-  'level-9':  '/src/assets/Maps/Story/S0202.png',
-  'level-10': '/src/assets/Maps/Story/S0302.png',
-  'level-11': '/src/assets/Maps/Story/S0502.png',
-  'level-12': '/src/assets/Maps/Story/S0702.png',
-  'level-13': '/src/assets/Maps/Story/S1001.png',
-  'level-14': '/src/assets/Maps/Story/S1101.png',
+  'level-1':  '/src/assets/maps/Story/S0101.png',
+  'level-2':  '/src/assets/maps/Story/S0201.png',
+  'level-3':  '/src/assets/maps/Story/S0401.png',
+  'level-4':  '/src/assets/maps/Story/S0501.png',
+  'level-5':  '/src/assets/maps/Story/S0601.png',
+  'level-6':  '/src/assets/maps/Story/S0701.png',
+  'level-7':  '/src/assets/maps/Story/S0901.png',
+  'level-8':  '/src/assets/maps/Story/S0102.png',
+  'level-9':  '/src/assets/maps/Story/S0202.png',
+  'level-10': '/src/assets/maps/Story/S0302.png',
+  'level-11': '/src/assets/maps/Story/S0502.png',
+  'level-12': '/src/assets/maps/Story/S0702.png',
+  'level-13': '/src/assets/maps/Story/S1001.png',
+  'level-14': '/src/assets/maps/Story/S1101.png',
 };
-const DEFAULT_MAP_IMG = '/src/assets/Maps/map-01-noche-valdris.jpg';
+const DEFAULT_MAP_IMG = '/src/assets/maps/map-01-noche-valdris.jpg';
 
 // ── Clase principal ────────────────────────────────────────────────────────────
 export class GamePage {
