@@ -40,9 +40,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # ── Assets binarios pesados (NO subir a GitHub) ───
-# Los assets del juego (películas, música, etc.) son demasiado grandes
-# para GitHub. Mantenlos solo en local.
-frontend/src/assets/Movies/
+# Movies/ y characters/ SÍ se incluyen — son los usados en el juego (cada uno < 100 MB).
+# Music, Backgrounds, etc. son demasiado grandes para GitHub.
 frontend/src/assets/Music/
 frontend/src/assets/Sound Effects/
 frontend/src/assets/Backgrounds/
@@ -52,9 +51,9 @@ frontend/src/assets/Character Art + Sprites/
 frontend/src/assets/Voices [English]/
 frontend/src/assets/Voices [Japanese]/
 frontend/src/assets/Weapon Sprites/
-frontend/src/assets/Maps/
 frontend/src/assets/UI/
-frontend/src/assets/characters/
+# Mapas: se excluye toda Maps/ y se fuerza git add solo en los 14 mapas de niveles
+frontend/src/assets/Maps/
 
 # ── Sistema operativo ──────────────────────────────
 .DS_Store
