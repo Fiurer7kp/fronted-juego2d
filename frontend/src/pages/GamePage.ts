@@ -176,6 +176,13 @@ export class GamePage {
   private camera    = { x: 0, y: 0 };
   private cameraTgt = { x: 0, y: 0 };
 
+  // ── Toque táctil ──────────────────────────────────────────────────────────
+  private touchStartX    = 0;
+  private touchStartY    = 0;
+  private touchStartCamX = 0;
+  private touchStartCamY = 0;
+  private touchMoved     = false;
+
   // ── Cursor de teclado/ratón ────────────────────────────────────────────────
   private cursor:      Position   = { x: 0, y: 0 };
   private showCursor   = false;
@@ -1468,8 +1475,11 @@ export class GamePage {
 
   // ── Eventos ────────────────────────────────────────────────────────────────
   private bindEvents(): void {
-    this.canvas.addEventListener('click',     (e) => this.onCanvasClick(e));
-    this.canvas.addEventListener('mousemove', (e) => this.onCanvasHover(e));
+    this.canvas.addEventListener('click',      (e) => this.onCanvasClick(e));
+    this.canvas.addEventListener('mousemove',  (e) => this.onCanvasHover(e));
+    this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+    this.canvas.addEventListener('touchmove',  (e) => this.onTouchMove(e),  { passive: false });
+    this.canvas.addEventListener('touchend',   (e) => this.onTouchEnd(e),   { passive: false });
     this.canvas.addEventListener('mouseleave', () => {
       this.showCursor  = false;
       this.hoveredPath = [];
@@ -1528,6 +1538,54 @@ export class GamePage {
       if (this.boundKeyDown) document.removeEventListener('keydown', this.boundKeyDown);
       import('./MenuPage').then(({ MenuPage }) => new MenuPage().render(this.container));
     });
+  }
+
+  // ── Soporte táctil (scroll de cámara + tap para seleccionar) ─────────────
+  private onTouchStart(e: TouchEvent): void {
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    this.touchStartX    = t.clientX;
+    this.touchStartY    = t.clientY;
+    this.touchStartCamX = this.camera.x;
+    this.touchStartCamY = this.camera.y;
+    this.touchMoved     = false;
+  }
+
+  private onTouchMove(e: TouchEvent): void {
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    const t  = e.touches[0];
+    const dx = this.touchStartX - t.clientX;
+    const dy = this.touchStartY - t.clientY;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) this.touchMoved = true;
+    if (!this.touchMoved) return;
+
+    const rect   = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width  / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const maxCamX = COLS * TILE - VIEWPORT_W;
+    const maxCamY = ROWS * TILE - VIEWPORT_H;
+
+    this.camera.x    = Math.max(0, Math.min(maxCamX, this.touchStartCamX + dx * scaleX));
+    this.camera.y    = Math.max(0, Math.min(maxCamY, this.touchStartCamY + dy * scaleY));
+    this.cameraTgt.x = this.camera.x;
+    this.cameraTgt.y = this.camera.y;
+    this.draw();
+  }
+
+  private onTouchEnd(e: TouchEvent): void {
+    e.preventDefault();
+    if (this.touchMoved) return;
+    if (this.isAnimating || this.gameState?.currentPhase !== 'PLAYER') return;
+    const t    = e.changedTouches[0];
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width  / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const mx = Math.floor(((t.clientX - rect.left) * scaleX + this.camera.x) / TILE);
+    const my = Math.floor(((t.clientY - rect.top)  * scaleY + this.camera.y) / TILE);
+    if (mx < 0 || mx >= COLS || my < 0 || my >= ROWS) return;
+    this.handleTileClick(mx, my);
   }
 
   private onCanvasClick(e: MouseEvent): void {
