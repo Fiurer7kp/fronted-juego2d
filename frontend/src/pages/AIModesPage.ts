@@ -345,11 +345,21 @@ export class AIModesPage {
     const canvas = this.container.querySelector('#ai-minimap') as HTMLCanvasElement;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
+    const COLS_MAP = 20, ROWS_MAP = 15;
+    const cw = canvas.width  / COLS_MAP;
+    const ch = canvas.height / ROWS_MAP;
+
+    const drawTerrain = (layout: number[][]) => {
+      for (let y = 0; y < ROWS_MAP; y++) {
+        for (let x = 0; x < COLS_MAP; x++) {
+          const t = layout[y]?.[x] ?? 0;
+          ctx.fillStyle = TERRAIN_COLORS[t] ?? TERRAIN_COLORS[0];
+          ctx.fillRect(x * cw, y * ch, cw + 0.5, ch + 0.5);
+        }
+      }
+    };
 
     const drawUnits = () => {
-      const COLS_MAP = 20, ROWS_MAP = 15;
-      const cw = canvas.width  / COLS_MAP;
-      const ch = canvas.height / ROWS_MAP;
       for (const unit of cfg.state.units) {
         const isPlayer = unit.team === 'player';
         const cx = (unit.position.x + 0.5) * cw;
@@ -379,22 +389,19 @@ export class AIModesPage {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         drawUnits();
       };
-      img.onerror = () => drawUnits();
+      img.onerror = () => {
+        // Fallback: dibujar terreno procedural
+        if (cfg.state.mapLayout) drawTerrain(cfg.state.mapLayout);
+        drawUnits();
+      };
       img.src = cfg.mapImagePath;
     } else {
+      if (cfg.state.mapLayout) drawTerrain(cfg.state.mapLayout);
       drawUnits();
     }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-
-  private darken(hex: string, factor: number): string {
-    const n = parseInt(hex.slice(1), 16);
-    const r = Math.round(((n >> 16) & 0xff) * factor);
-    const g = Math.round(((n >>  8) & 0xff) * factor);
-    const b = Math.round(( n        & 0xff) * factor);
-    return `rgb(${r},${g},${b})`;
-  }
 
   private setText(sel: string, text: string): void {
     const el = this.container.querySelector(sel) as HTMLElement | null;

@@ -140,12 +140,14 @@ export class GamePage {
   private useProceduralMap = false;
   private aiLevelLabel = '';
   private aiMapImagePath?: string;
+  private aiDescription?: string;
   private aiBossDialogue?: string;
   private aiBossDeathLine?: string;
   private aiAttackTaunts: string[] = [];
   private aiVictoryMessage?: string;
   private aiDefeatMessage?: string;
-  private aiBossId?: string;       // id del primer enemigo (jefe)
+  private aiBossId?: string;
+  private gameOver = false;
 
   private selectedUnit:   Unit | null = null;
   private reachableTiles: Position[]  = [];
@@ -218,11 +220,13 @@ export class GamePage {
     this.aiLevelLabel      = aiLabel ?? '';
     this.useProceduralMap  = !levelId;
     this.aiMapImagePath    = aiMapImage;
+    this.aiDescription     = aiContent?.description;
     this.aiBossDialogue    = aiContent?.bossDialogue;
     this.aiBossDeathLine   = aiContent?.bossDeathLine;
     this.aiAttackTaunts    = aiContent?.attackTaunts ?? [];
     this.aiVictoryMessage  = aiContent?.victoryMessage;
     this.aiDefeatMessage   = aiContent?.defeatMessage;
+    this.gameOver          = false;
 
     container.innerHTML = this.buildHTML();
     this.canvas = container.querySelector('#game-canvas') as HTMLCanvasElement;
@@ -268,20 +272,25 @@ export class GamePage {
         background:rgba(0,0,0,0);
         display:flex;flex-direction:column;align-items:center;justify-content:center;
         transition:background 0.5s ease;
-        font-family:'serif';
-        cursor:pointer;
+        font-family:'serif';cursor:pointer;
       `;
 
       const label = this.aiLevelLabel.replace(/^[^ ]+ · /, '').replace(/ · ★+$/, '').replace(/★+$/, '').trim();
+      const desc    = this.aiDescription ?? '';
       const dialogue = this.aiBossDialogue ? `"${this.aiBossDialogue}"` : '';
 
       ovl.innerHTML = `
-        <div style="text-align:center;max-width:600px;padding:40px;opacity:0;transform:translateY(20px);transition:all 0.6s ease 0.3s;" id="intro-content">
+        <div style="text-align:center;max-width:600px;padding:40px;opacity:0;transform:translateY(20px);
+          transition:all 0.6s ease 0.3s;" id="intro-content">
           <div style="font-size:0.7rem;color:#c8922a;letter-spacing:6px;margin-bottom:18px;">— ASHEN CROWN —</div>
-          <div style="font-size:2.2rem;font-weight:bold;color:#f0e0c0;letter-spacing:3px;line-height:1.2;margin-bottom:16px;text-shadow:0 0 30px rgba(200,146,42,0.5);">${label || 'BATALLA'}</div>
-          <div style="width:60px;height:1px;background:linear-gradient(90deg,transparent,#c8922a,transparent);margin:0 auto 20px;"></div>
-          ${dialogue ? `<div style="font-size:1rem;color:#d4a060;font-style:italic;line-height:1.7;margin-bottom:28px;">${dialogue}</div>` : ''}
-          <div style="font-size:0.65rem;color:#555;letter-spacing:4px;margin-top:10px;">TOCA PARA COMENZAR</div>
+          <div style="font-size:2.2rem;font-weight:bold;color:#f0e0c0;letter-spacing:3px;line-height:1.2;
+            margin-bottom:16px;text-shadow:0 0 30px rgba(200,146,42,0.5);">${label || 'BATALLA'}</div>
+          <div style="width:60px;height:1px;background:linear-gradient(90deg,transparent,#c8922a,transparent);
+            margin:0 auto 20px;"></div>
+          ${desc ? `<div style="font-size:0.85rem;color:#b8a888;line-height:1.7;margin-bottom:18px;">${desc}</div>` : ''}
+          ${dialogue ? `<div style="font-size:0.92rem;color:#d4a060;font-style:italic;line-height:1.7;
+            margin-bottom:20px;padding:10px 16px;border-left:2px solid #c8922a44;">${dialogue}</div>` : ''}
+          <div style="font-size:0.6rem;color:#444;letter-spacing:4px;margin-top:8px;">TOCA PARA COMENZAR</div>
         </div>
       `;
 
@@ -292,15 +301,17 @@ export class GamePage {
         if (content) { content.style.opacity = '1'; content.style.transform = 'translateY(0)'; }
       });
 
+      let dismissed = false;
       const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
         ovl.style.transition = 'opacity 0.4s ease';
         ovl.style.opacity = '0';
         setTimeout(() => { ovl.remove(); resolve(); }, 400);
       };
 
       ovl.addEventListener('click', dismiss);
-      // Auto-dismiss después de 5 segundos si no hace click
-      setTimeout(dismiss, 5000);
+      setTimeout(dismiss, 6000);
     });
   }
 
@@ -1802,18 +1813,16 @@ export class GamePage {
     const { defDefeated, atkDefeated } = await this.executeLocalCombatRounds(attacker, defender);
     if (defDefeated || atkDefeated) { AudioManager.playSfx('death'); await this.delay(350); }
     await this.closeBattleScreen();
-    if (defDefeated) {
-      await this.deathAnimation(defender);
-      defender.alive = false;
-      if (this.aiBossDeathLine && defender.id === this.aiBossId) {
-        this.msg(`${defender.name}: "${this.aiBossDeathLine}"`);
-        this.aiBossDeathLine = undefined;
-      } else {
-        this.msg(`¡${defender.name} derrotado!`);
-      }
+    // Animar muertes en paralelo (muerte mutua posible)
+    if (defDefeated) { await this.deathAnimation(defender); defender.alive = false; }
+    if (atkDefeated) { await this.deathAnimation(attacker); attacker.alive = false; }
+    // Mensaje prioritario: línea de muerte del jefe > derrota genérica
+    if (defDefeated && this.aiBossDeathLine && defender.id === this.aiBossId) {
+      this.msg(`${defender.name}: "${this.aiBossDeathLine}"`);
+      this.aiBossDeathLine = undefined;
+    } else if (defDefeated) {
+      this.msg(`¡${defender.name} derrotado!`);
     } else if (atkDefeated) {
-      await this.deathAnimation(attacker);
-      attacker.alive = false;
       this.msg(`¡${attacker.name} fue derrotado!`);
     } else {
       this.msg(`${attacker.name} atacó a ${defender.name}.`);
@@ -1948,10 +1957,77 @@ export class GamePage {
   }
 
   private checkWin(): void {
+    if (this.gameOver) return;
     const playerAlive = this.gameState.units.some(u => u.alive && u.team === 'player');
     const enemyAlive  = this.gameState.units.some(u => u.alive && u.team === 'enemy');
-    if (!enemyAlive)  this.msg(`🏆 ${this.aiVictoryMessage ?? '¡VICTORIA! Todos los enemigos derrotados.'}`);
-    if (!playerAlive) this.msg(`💀 ${this.aiDefeatMessage ?? 'DERROTA. Todas tus unidades han caído.'}`);
+    if (!enemyAlive)  { this.gameOver = true; setTimeout(() => this.showEndScreen(true),  600); }
+    if (!playerAlive) { this.gameOver = true; setTimeout(() => this.showEndScreen(false), 600); }
+  }
+
+  private showEndScreen(victory: boolean): void {
+    const accentColor = victory ? '#f0c040' : '#cc3333';
+    const icon  = victory ? '🏆' : '💀';
+    const title = victory
+      ? (this.aiVictoryMessage ?? '¡VICTORIA!')
+      : (this.aiDefeatMessage  ?? 'DERROTA');
+
+    const ovl = document.createElement('div');
+    ovl.style.cssText = `
+      position:fixed;inset:0;z-index:9999;
+      background:rgba(0,0,0,0);opacity:1;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      transition:background 0.6s ease;font-family:'serif';
+    `;
+    ovl.innerHTML = `
+      <div id="end-content" style="text-align:center;max-width:520px;padding:48px 40px;
+        opacity:0;transform:scale(0.92);transition:all 0.5s ease 0.3s;
+        background:rgba(8,8,8,0.72);border:1px solid ${accentColor}44;border-radius:6px;">
+        <div style="font-size:3rem;margin-bottom:14px;">${icon}</div>
+        <div style="font-size:0.6rem;color:${accentColor};letter-spacing:6px;margin-bottom:12px;">— ASHEN CROWN —</div>
+        <div style="font-size:1.9rem;font-weight:bold;color:${accentColor};letter-spacing:3px;
+          text-shadow:0 0 40px ${accentColor}88;margin-bottom:20px;">${title}</div>
+        <div style="width:50px;height:1px;background:linear-gradient(90deg,transparent,${accentColor},transparent);
+          margin:0 auto 28px;"></div>
+        <div style="display:flex;gap:12px;justify-content:center;">
+          <button id="btn-end-retry" style="padding:10px 22px;background:transparent;
+            border:1px solid ${accentColor};color:${accentColor};
+            font-family:monospace;font-size:0.68rem;letter-spacing:2px;cursor:pointer;border-radius:3px;">
+            ↺ ${this.useProceduralMap ? 'NUEVO NIVEL' : 'MENÚ'}
+          </button>
+          <button id="btn-end-menu" style="padding:10px 22px;background:transparent;
+            border:1px solid #444;color:#888;
+            font-family:monospace;font-size:0.68rem;letter-spacing:2px;cursor:pointer;border-radius:3px;">
+            ↩ MENÚ PRINCIPAL
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(ovl);
+    requestAnimationFrame(() => {
+      ovl.style.background = victory ? 'rgba(0,0,0,0.82)' : 'rgba(0,0,0,0.92)';
+      const c = ovl.querySelector('#end-content') as HTMLElement;
+      if (c) { c.style.opacity = '1'; c.style.transform = 'scale(1)'; }
+    });
+
+    AudioManager.stop();
+
+    const goMenu = () => {
+      if (this.boundKeyDown) document.removeEventListener('keydown', this.boundKeyDown);
+      ovl.remove();
+      import('./MenuPage').then(({ MenuPage }) => new MenuPage().render(this.container));
+    };
+    const goRetry = () => {
+      if (this.boundKeyDown) document.removeEventListener('keydown', this.boundKeyDown);
+      ovl.remove();
+      if (this.useProceduralMap)
+        import('./AIModesPage').then(({ AIModesPage }) => new AIModesPage().render(this.container));
+      else
+        import('./MenuPage').then(({ MenuPage }) => new MenuPage().render(this.container));
+    };
+
+    ovl.querySelector('#btn-end-retry')?.addEventListener('click', (e) => { e.stopPropagation(); goRetry(); });
+    ovl.querySelector('#btn-end-menu')?.addEventListener('click',  (e) => { e.stopPropagation(); goMenu(); });
   }
 
   private delay(ms: number): Promise<void> {
