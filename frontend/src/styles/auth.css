@@ -232,6 +232,10 @@
 .menu-btn-salir { margin-top: 16px; border-bottom-color: transparent; color: var(--gris-claro); }
 .menu-btn-salir:hover { color: var(--rojo-fuego); }
 
+.menu-btn-ia { border-bottom-color: rgba(0,240,160,0.25); }
+.menu-btn-ia:hover { border-bottom-color: rgba(0,240,160,0.55); }
+.menu-btn-ia:hover::before { background: rgba(0,240,160,0.07); }
+
 /* ── Panel de idioma ─────────────────────────────────── */
 .idioma-overlay {
   position: fixed;

@@ -136,6 +136,9 @@ export class GamePage {
   private container!: HTMLElement;
   private gameState!: GameState;
   private levelId?: string;
+  private useProceduralMap = false;
+  private aiLevelLabel = '';
+  private aiMapImagePath?: string;
 
   private selectedUnit:   Unit | null = null;
   private reachableTiles: Position[]  = [];
@@ -195,9 +198,19 @@ export class GamePage {
   }
 
   // ── Render principal ───────────────────────────────────────────────────────
-  async render(container: HTMLElement, initialState?: GameState, levelId?: string): Promise<void> {
+  async render(
+    container: HTMLElement,
+    initialState?: GameState,
+    levelId?: string,
+    aiLabel?: string,
+    aiMapImage?: string,
+  ): Promise<void> {
     this.container = container;
-    this.levelId = levelId;
+    this.levelId   = levelId;
+    this.aiLevelLabel     = aiLabel ?? '';
+    this.useProceduralMap = !levelId; // sin levelId → renderiza con colores de terreno
+    this.aiMapImagePath   = aiMapImage;
+
     container.innerHTML = this.buildHTML();
     this.canvas = container.querySelector('#game-canvas') as HTMLCanvasElement;
     this.ctx    = this.canvas.getContext('2d')!;
@@ -226,18 +239,34 @@ export class GamePage {
     this.bindEvents();
   }
 
+  // ── Calcula el tamaño de pantalla óptimo para el canvas ───────────────────
+  private calcDisplaySize(): { w: number; h: number } {
+    const topbarH  = 58;   // topbar height + gaps
+    const padTotal = 20;   // padding
+    const sidebarW = 256;  // 240px sidebar + gap + border
+    const availH   = window.innerHeight - topbarH - padTotal;
+    const availW   = window.innerWidth  - sidebarW - padTotal;
+    const scale    = Math.min(availH / VIEWPORT_H, availW / VIEWPORT_W);
+    return { w: Math.round(VIEWPORT_W * scale), h: Math.round(VIEWPORT_H * scale) };
+  }
+
   // ── HTML ───────────────────────────────────────────────────────────────────
   private buildHTML(): string {
     const W = VIEWPORT_W, H = VIEWPORT_H;
+    const { w: dw, h: dh } = this.calcDisplaySize();
+    const aiHtml = this.aiLevelLabel
+      ? `<span id="game-ai-label">🤖 ${this.aiLevelLabel}</span>`
+      : '';
     return `
       <div class="game-wrapper">
         <div class="game-topbar">
           <span id="game-phase">⚔ FASE DEL JUGADOR</span>
+          ${aiHtml}
           <span id="game-turn">TURNO 1</span>
         </div>
         <div class="game-layout">
           <div class="game-map-wrapper" style="position:relative;">
-            <canvas id="game-canvas" width="${W}" height="${H}"></canvas>
+            <canvas id="game-canvas" width="${W}" height="${H}" style="width:${dw}px;height:${dh}px;"></canvas>
             <div id="combat-preview" style="display:none; position:absolute; bottom:0; left:0; right:0;
               background:rgba(13,17,23,0.97); border-top:1px solid rgba(200,146,42,0.5);
               padding:12px 16px; font-family:var(--font-ui,monospace); color:#fff; font-size:0.6rem;">
@@ -273,12 +302,14 @@ export class GamePage {
 
   // ── Carga de assets ────────────────────────────────────────────────────────
   private loadMap(): Promise<void> {
-    const src = (this.levelId && LEVEL_MAP_IMAGES[this.levelId]) ?? DEFAULT_MAP_IMG;
+    const src = this.useProceduralMap
+      ? this.aiMapImagePath ?? ''
+      : (this.levelId && LEVEL_MAP_IMAGES[this.levelId]) ?? DEFAULT_MAP_IMG;
+    if (!src) return Promise.resolve();
     return new Promise(resolve => {
       const img = new Image();
       img.onload  = () => { this.mapImage = img; resolve(); };
       img.onerror = () => {
-        // Fallback si la imagen del nivel no existe
         if (src !== DEFAULT_MAP_IMG) {
           const fallback = new Image();
           fallback.onload  = () => { this.mapImage = fallback; resolve(); };
@@ -357,7 +388,7 @@ export class GamePage {
     ctx.save();
     ctx.translate(-Math.round(this.camera.x), -Math.round(this.camera.y));
 
-    // Terreno — dibujado al tamaño completo del mundo
+    // Terreno — imagen real (campaña o IA con imagen asignada) o tiles procedurales
     if (this.mapImage) {
       ctx.drawImage(this.mapImage, 0, 0, COLS * TILE, ROWS * TILE);
     } else {
@@ -834,19 +865,29 @@ export class GamePage {
     const defBlock = this.container.querySelector('#prev-def') as HTMLElement;
     if (!atkBlock || !defBlock) return;
 
-    const fmt = (name: string, hp: number, dmg: number, hit: number, crit: number, dbl: boolean, weapon: string) =>
-      `<div style="font-size:0.75rem;font-weight:bold;color:#f0c040;margin-bottom:4px;">${name}</div>
-       <div style="font-size:0.6rem;color:#aaa;">🗡 ${weapon}</div>
-       <div>HP: <b>${hp}</b></div>
-       <div>DMG: <b style="color:#ff9a9a">${dmg}</b></div>
-       <div>HIT: <b>${hit}%</b>  CRIT: <b>${crit}%</b>${dbl ? '  <span style="color:#ff0">×2</span>' : ''}</div>`;
+    const row = (label: string, val: string, color = '#e0e0e0') =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;line-height:1.7;">
+         <span style="color:#777;white-space:nowrap;">${label}</span>
+         <span style="color:${color};font-weight:bold;white-space:nowrap;">${val}</span>
+       </div>`;
 
-    atkBlock.innerHTML = fmt(p.attackerName, p.attackerHp, p.attackerDamage, p.attackerHitRate, p.attackerCritRate, p.attackerDoubleAttacks, p.attackerWeaponName)
-      + `<div style="margin-top:6px;color:#f0c040;font-size:0.7rem;">WPN: ${advSymbol}</div>`;
+    const fmt = (name: string, hp: number, maxHp: number, dmg: number, hit: number, crit: number, dbl: boolean, weapon: string) =>
+      `<div style="font-size:0.72rem;font-weight:bold;color:#f0c040;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+       <div style="font-size:0.55rem;color:#888;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🗡 ${weapon}</div>
+       <div style="font-size:0.62rem;">
+         ${row('HP', `${hp}/${maxHp}`, hp/maxHp > 0.5 ? '#4caf50' : hp/maxHp > 0.25 ? '#f0c040' : '#e53935')}
+         ${row('DMG', String(dmg), '#ff9a9a')}
+         ${row('HIT', `${hit}%`)}
+         ${row('CRT', `${crit}%${dbl ? ' ×2' : ''}`, crit > 0 ? '#ffee66' : '#e0e0e0')}
+       </div>`;
+
+    atkBlock.innerHTML = fmt(p.attackerName, p.attackerHp, attacker.maxHp, p.attackerDamage, p.attackerHitRate, p.attackerCritRate, p.attackerDoubleAttacks, p.attackerWeaponName)
+      + `<div style="margin-top:5px;font-size:0.6rem;color:#f0c040;text-align:center;">WPN ${advSymbol}</div>`;
     defBlock.innerHTML = p.defenderCanCounter
-      ? fmt(p.defenderName, p.defenderHp, p.defenderDamage, p.defenderHitRate, p.defenderCritRate, p.defenderDoubleAttacks, p.defenderWeaponName)
-      : `<div style="font-size:0.75rem;font-weight:bold;color:#888;margin-bottom:4px;">${p.defenderName}</div>
-         <div style="color:#888;font-size:0.6rem;">Sin contraataque</div><div>HP: <b>${p.defenderHp}</b></div>`;
+      ? fmt(p.defenderName, p.defenderHp, defender.maxHp, p.defenderDamage, p.defenderHitRate, p.defenderCritRate, p.defenderDoubleAttacks, p.defenderWeaponName)
+      : `<div style="font-size:0.72rem;font-weight:bold;color:#666;margin-bottom:5px;">${p.defenderName}</div>
+         <div style="font-size:0.6rem;color:#555;margin-bottom:4px;">Sin contraataque</div>
+         ${`<div style="font-size:0.62rem;">${row('HP', `${p.defenderHp}/${defender.maxHp}`, '#4caf50')}</div>`}`;
 
     const panel = this.container.querySelector('#combat-preview') as HTMLElement;
     if (panel) panel.style.display = 'block';
@@ -866,6 +907,16 @@ export class GamePage {
     // Vars that survive the try/catch for post-close cleanup
     let defDefeated = false, atkDefeated = false, expGained = 0;
     let levelUpGains: string[] = [];
+
+    // Modo IA: usar combate local directamente (estado no existe en backend)
+    if (this.useProceduralMap) {
+      await this.localAttack(attacker, defender);
+      attacker.hasMoved = true; attacker.hasActed = true;
+      this.selectedUnit = null; this.reachableTiles = [];
+      this.isAnimating  = false;
+      this.draw(); this.checkWin(); this.checkAllMoved();
+      return;
+    }
 
     // Open overlay ONCE before try/catch — never inside
     await this.openBattleScreen(attacker, defender);
@@ -912,19 +963,10 @@ export class GamePage {
       if (defDefeated || atkDefeated) { AudioManager.playSfx('death'); await this.delay(350); }
 
     } catch {
-      // Fallback local — NO second openBattleScreen here
-      const magical = !!attacker.equippedWeapon?.magical;
-      const dmg = magical
-        ? Math.max(0, attacker.mag  + (attacker.equippedWeapon?.might ?? 0) - defender.res)
-        : Math.max(1, attacker.str + (attacker.equippedWeapon?.might ?? 0) - defender.def);
-      await this.battleLunge('attacker');
-      await this.battleHit('defender', dmg, false, magical);
-      await this.delay(300);
-      defender.currentHp = Math.max(0, defender.currentHp - dmg);
-      defDefeated = defender.currentHp <= 0;
-      if (defDefeated) { AudioManager.playSfx('death'); await this.delay(350); }
-      this.addFloat(defender.position, String(dmg), defDefeated ? '#f44' : '#fff');
-      this.msg(`${attacker.name} ataca a ${defender.name} — ${dmg} de daño!`);
+      // Fallback: simulación local completa (contra, doble ataque, crít)
+      const r = await this.executeLocalCombatRounds(attacker, defender);
+      defDefeated = r.defDefeated; atkDefeated = r.atkDefeated;
+      if (defDefeated || atkDefeated) { AudioManager.playSfx('death'); await this.delay(350); }
     }
 
     // Close overlay ONCE — always runs regardless of try/catch outcome
@@ -1505,18 +1547,19 @@ export class GamePage {
       this.selectedUnit   = null;
       this.reachableTiles = [];
       this.hideCombatPreview();
-      try {
-        // UNA sola llamada a endTurn() - procesa todos los enemigos
-        const result = await GameService.endTurn();
-        await this.animateEnemyPhase(result);
-      } catch (error) {
-        console.error('Error en fase enemiga:', error);
-        // Fallback sin backend
-        this.gameState.units.forEach(u => { if (u.team === 'player') u.hasMoved = u.hasActed = false; });
-        this.gameState.turnNumber++;
-        this.gameState.currentPhase = 'PLAYER';
-        this.draw();
-        this.msg(`Turno ${this.gameState.turnNumber} — ¡Tu turno!`);
+
+      if (this.useProceduralMap) {
+        // Modo IA (procedural): sin sesión en backend → IA local
+        await this.localEnemyTurn();
+      } else {
+        // Modo campaña: el backend ejecuta la IA y devuelve las acciones
+        try {
+          const result = await GameService.endTurn();
+          await this.animateEnemyPhase(result);
+        } catch {
+          // Fallback local si el backend no responde
+          await this.localEnemyTurn();
+        }
       }
       this.checkWin();
     });
@@ -1644,6 +1687,171 @@ export class GamePage {
     }
 
     this.msg('No puedes moverte ahí. Elige casillas azules o enemigos en rojo.');
+  }
+
+  // ── IA local de combate (sin backend) ────────────────────────────────────
+  private async executeLocalCombatRounds(
+    attacker: Unit, defender: Unit
+  ): Promise<{ defDefeated: boolean; atkDefeated: boolean }> {
+    const p = calcPreview(attacker, defender, this.layout);
+
+    const doRound = async (
+      side: 'attacker' | 'defender',
+      dmg: number, hit: number, crit: number, magical: boolean
+    ): Promise<void> => {
+      const defSide: 'attacker' | 'defender' = side === 'attacker' ? 'defender' : 'attacker';
+      await this.battleLunge(side);
+      const isHit  = Math.random() * 100 < hit;
+      const isCrit = isHit && Math.random() * 100 < crit;
+      const realDmg = isCrit ? dmg * 3 : dmg;
+      if (isHit && realDmg > 0) {
+        if (defSide === 'defender') defender.currentHp = Math.max(0, defender.currentHp - realDmg);
+        else                        attacker.currentHp = Math.max(0, attacker.currentHp - realDmg);
+        await this.battleHit(defSide, realDmg, isCrit, magical);
+      } else {
+        this.battleMiss(defSide);
+        await this.delay(220);
+      }
+      await this.delay(55);
+    };
+
+    const aMag = !!attacker.equippedWeapon?.magical;
+    const dMag = !!defender.equippedWeapon?.magical;
+
+    await doRound('attacker', p.attackerDamage, p.attackerHitRate, p.attackerCritRate, aMag);
+
+    if (p.defenderCanCounter && defender.currentHp > 0)
+      await doRound('defender', p.defenderDamage, p.defenderHitRate, p.defenderCritRate, dMag);
+
+    if (p.attackerDoubleAttacks && defender.currentHp > 0)
+      await doRound('attacker', p.attackerDamage, p.attackerHitRate, p.attackerCritRate, aMag);
+
+    if (p.defenderDoubleAttacks && p.defenderCanCounter && attacker.currentHp > 0)
+      await doRound('defender', p.defenderDamage, p.defenderHitRate, p.defenderCritRate, dMag);
+
+    return { defDefeated: defender.currentHp <= 0, atkDefeated: attacker.currentHp <= 0 };
+  }
+
+  private async localAttack(attacker: Unit, defender: Unit): Promise<void> {
+    await this.openBattleScreen(attacker, defender);
+    const { defDefeated, atkDefeated } = await this.executeLocalCombatRounds(attacker, defender);
+    if (defDefeated || atkDefeated) { AudioManager.playSfx('death'); await this.delay(350); }
+    await this.closeBattleScreen();
+    if (defDefeated) { await this.deathAnimation(defender); defender.alive = false; }
+    if (atkDefeated) { await this.deathAnimation(attacker); attacker.alive = false; }
+    if (defDefeated)      this.msg(`¡${defender.name} derrotado!`);
+    else if (atkDefeated) this.msg(`¡${attacker.name} fue derrotado!`);
+    else                  this.msg(`${attacker.name} atacó a ${defender.name}.`);
+  }
+
+  private findBestMoveFor(unit: Unit, target: Unit): Position | null {
+    const reachable = this.calcMovement(unit);
+    if (reachable.length === 0) return null;
+    const wMin = unit.equippedWeapon?.minRange ?? 1;
+    const wMax = unit.equippedWeapon?.maxRange ?? 1;
+    const inRange = reachable.filter(p => {
+      const d = dist(p, target.position);
+      return d >= wMin && d <= wMax;
+    });
+    if (inRange.length > 0) return inRange[0];
+    return reachable.reduce((best, p) =>
+      dist(p, target.position) < dist(best, target.position) ? p : best
+    );
+  }
+
+  private async localEnemyTurn(): Promise<void> {
+    this.gameState.currentPhase = 'ENEMY';
+    this.draw();
+    this.msg('Fase enemiga — ¡Los enemigos atacan!');
+    await this.delay(600);
+
+    // Ordenar: agresivos primero, defensivos al final
+    const enemies = [...this.gameState.units]
+      .filter(u => u.alive && u.team === 'enemy')
+      .sort((a, b) => {
+        const order: Record<string, number> = { AGGRESSIVE: 0, PATROL: 1, DEFENSIVE: 2 };
+        return (order[a.aiBehavior ?? 'AGGRESSIVE'] ?? 0) - (order[b.aiBehavior ?? 'AGGRESSIVE'] ?? 0);
+      });
+
+    for (const enemy of enemies) {
+      if (!enemy.alive) continue;
+      const players = this.gameState.units.filter(u => u.alive && u.team === 'player');
+      if (players.length === 0) break;
+
+      this.highlightUnit = enemy;
+      this.centerCameraOn(enemy.position);
+      if (!this.animFrame) this.startAnim();
+      await this.delay(300);
+
+      // Elegir objetivo según comportamiento
+      const target = this.chooseTarget(enemy, players);
+      const wMin = enemy.equippedWeapon?.minRange ?? 1;
+      const wMax = enemy.equippedWeapon?.maxRange ?? 1;
+      const dBefore = dist(enemy.position, target.position);
+      const behavior = enemy.aiBehavior ?? 'AGGRESSIVE';
+
+      // DEFENSIVE: solo actúa si el jugador está cerca (rango mov + arma)
+      const activationRange = enemy.mov + wMax + 1;
+      if (behavior === 'DEFENSIVE' && dBefore > activationRange) {
+        this.highlightUnit = null;
+        continue;
+      }
+
+      // PATROL: solo actúa si el jugador está muy cerca
+      if (behavior === 'PATROL' && dBefore > wMax + 2) {
+        this.highlightUnit = null;
+        continue;
+      }
+
+      // Mover si no está en rango de ataque
+      if (dBefore < wMin || dBefore > wMax) {
+        const from = { ...enemy.position };
+        const best = this.findBestMoveFor(enemy, target);
+        if (best && (best.x !== from.x || best.y !== from.y)) {
+          this.centerCameraOn(best);
+          await this.animateMovement(enemy, from, best);
+          await this.delay(120);
+        }
+      }
+
+      // Atacar si está en rango
+      const dAfter = dist(enemy.position, target.position);
+      if (dAfter >= wMin && dAfter <= wMax && target.alive) {
+        this.msg(`${enemy.name} ataca a ${target.name}!`);
+        await this.localAttack(enemy, target);
+      }
+
+      this.highlightUnit = null;
+      this.draw();
+      await this.delay(180);
+    }
+
+    this.gameState.currentPhase = 'PLAYER';
+    this.gameState.turnNumber++;
+    this.gameState.units.forEach(u => {
+      if (u.team === 'player') { u.hasMoved = false; u.hasActed = false; }
+    });
+    this.selectedUnit   = null;
+    this.reachableTiles = [];
+    this.draw();
+    this.msg(`Turno ${this.gameState.turnNumber} — ¡Tu turno! Selecciona una unidad.`);
+    this.checkWin();
+  }
+
+  private chooseTarget(enemy: Unit, players: Unit[]): Unit {
+    const wMax = enemy.equippedWeapon?.maxRange ?? 1;
+    // Priorizar: primero unidades ya en rango de ataque, luego las más débiles
+    const inRange = players.filter(p => dist(p.position, enemy.position) <= wMax + enemy.mov);
+    const pool = inRange.length > 0 ? inRange : players;
+    // Elegir el más debilitado (menor HP%) entre los más cercanos
+    return pool.reduce((best, p) => {
+      const bHpPct = best.currentHp / best.maxHp;
+      const pHpPct = p.currentHp / p.maxHp;
+      const bDist  = dist(best.position, enemy.position);
+      const pDist  = dist(p.position, enemy.position);
+      // Combinación: preferir cerca + bajo HP
+      return (pDist + pHpPct * 5) < (bDist + bHpPct * 5) ? p : best;
+    });
   }
 
   // ── Utilidades ─────────────────────────────────────────────────────────────

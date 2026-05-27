@@ -44,6 +44,14 @@ export class MenuPage {
               </span>
               <span class="menu-btn-flecha">${hasSavedGame ? '›' : ''}</span>
             </button>
+            <button class="menu-btn menu-btn-ia" id="btn-modos-ia">
+              <span class="menu-btn-icono">🤖</span>
+              <span class="menu-btn-texto">
+                Modos IA
+                <small class="menu-btn-nota" style="color:#a0f0d0;">Niveles generados por IA</small>
+              </span>
+              <span class="menu-btn-flecha">›</span>
+            </button>
             <button class="menu-btn" id="btn-idioma">
               <span class="menu-btn-icono">🌐</span>
               <span class="menu-btn-texto">${t('menu.idioma')}</span>
@@ -80,6 +88,12 @@ export class MenuPage {
     container.querySelector('#btn-empezar')?.addEventListener('click', () => {
       import('./CampaignPage').then(({ CampaignPage }) => {
         new CampaignPage().render(document.getElementById('app')!);
+      });
+    });
+
+    container.querySelector('#btn-modos-ia')?.addEventListener('click', () => {
+      import('./AIModesPage').then(({ AIModesPage }) => {
+        new AIModesPage().render(document.getElementById('app') ?? container);
       });
     });
 
