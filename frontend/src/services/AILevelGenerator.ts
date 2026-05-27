@@ -18,10 +18,10 @@ export interface AILevelConfig {
   mapImagePath: string;
 }
 
-// ── Imágenes de mapa por modo ──────────────────────────────────────────────────
-const ARENA_MAPS   = Array.from({ length: 30 }, (_, i) =>
+// ── Imágenes de mapa por modo (solo los archivos subidos al repositorio) ──────
+const ARENA_MAPS   = Array.from({ length: 10 }, (_, i) =>
   `/src/assets/maps/Arena/Z${String(i + 1).padStart(4, '0')}.png`);
-const TEMPEST_MAPS = Array.from({ length: 61 }, (_, i) =>
+const TEMPEST_MAPS = Array.from({ length: 10 }, (_, i) =>
   `/src/assets/maps/Tempest Trial/W${String(i + 1).padStart(4, '0')}.png`);
 const TRAINING_MAPS = [
   '/src/assets/maps/Training Maps + Warriors Maps/V0211.png',
