@@ -1,4 +1,5 @@
 import type { GameState, Unit, Weapon, Position } from './GameService';
+import type { AILevelContent } from './GeminiService';
 
 // ── Dimensiones del mapa (deben coincidir con GamePage) ───────────────────────
 const COLS = 20, ROWS = 15;
@@ -16,6 +17,7 @@ export interface AILevelConfig {
   objective: string;
   state: GameState;
   mapImagePath: string;
+  aiContent?: AILevelContent;
 }
 
 // ── Imágenes de mapa por modo (solo los archivos subidos al repositorio) ──────

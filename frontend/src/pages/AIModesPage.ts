@@ -1,4 +1,5 @@
 import { AILevelGenerator, GameMode, Difficulty, AILevelConfig } from '../services/AILevelGenerator';
+import { GeminiService } from '../services/GeminiService';
 import type { Unit } from '../services/GameService';
 import { AudioManager } from '../services/AudioManager';
 
@@ -145,6 +146,20 @@ export class AIModesPage {
             </div>
 
             <div class="aimode-preview-seed" id="prev-seed"></div>
+
+            <!-- Diálogo del jefe (generado por Gemini) -->
+            <div id="prev-boss-wrap" style="display:none;margin-top:10px;
+              background:rgba(200,146,42,0.07);border:1px solid rgba(200,146,42,0.25);
+              border-radius:6px;padding:10px 14px;">
+              <div style="font-size:0.6rem;color:#c8922a;letter-spacing:2px;margin-bottom:5px;">
+                💬 EL JEFE DICE
+              </div>
+              <div id="prev-boss-dialogue" style="font-size:0.82rem;color:#e8dcc8;font-style:italic;line-height:1.6;"></div>
+            </div>
+
+            <!-- Estado de Gemini -->
+            <div id="prev-gemini-status" style="display:none;margin-top:8px;
+              font-size:0.68rem;color:#666;letter-spacing:1px;text-align:center;"></div>
           </div>
 
           <!-- Botón iniciar -->
@@ -215,18 +230,53 @@ export class AIModesPage {
     btn.textContent = '⚡ GENERANDO…';
     btn.disabled = true;
 
-    // Leer semilla manual
     const seedInput = this.container.querySelector('#seed-input') as HTMLInputElement;
     const rawSeed = seedInput?.value.trim();
     const seed = rawSeed ? Math.abs(parseInt(rawSeed)) || undefined : undefined;
 
-    // Timeout mínimo para que el navegador pinte el texto "GENERANDO…"
-    setTimeout(() => {
+    setTimeout(async () => {
       this.config = AILevelGenerator.generate(this.selectedMode, this.selectedDiff, seed);
       this.showPreview(this.config);
       btn.textContent = '⚡ REGENERAR';
       btn.disabled = false;
+
+      // Enriquecer con Gemini en segundo plano
+      this.enrichWithGemini(this.config);
     }, 60);
+  }
+
+  private async enrichWithGemini(cfg: AILevelConfig): Promise<void> {
+    const statusEl = this.container.querySelector('#prev-gemini-status') as HTMLElement;
+    if (statusEl) { statusEl.style.display = ''; statusEl.textContent = '🤖 Consultando Gemini AI…'; }
+
+    const enemyClasses = cfg.state.units
+      .filter(u => u.team === 'enemy')
+      .map(u => u.unitClass);
+
+    const content = await GeminiService.generateLevelContent(cfg.mode, cfg.difficulty, enemyClasses);
+
+    if (!content) {
+      if (statusEl) statusEl.style.display = 'none';
+      return;
+    }
+
+    // Guardar en config para el juego
+    cfg.aiContent = content;
+
+    // Actualizar textos del preview
+    this.setText('#prev-name', `${MODES.find(m => m.id === cfg.mode)?.icon ?? ''} ${content.levelName}`);
+    this.setText('#prev-desc', content.description);
+    this.setText('#prev-obj',  `OBJETIVO: ${content.objective} · ${'★'.repeat(cfg.difficulty)}${'☆'.repeat(5 - cfg.difficulty)}`);
+
+    // Mostrar diálogo del jefe
+    const bossWrap = this.container.querySelector('#prev-boss-wrap') as HTMLElement;
+    const bossEl   = this.container.querySelector('#prev-boss-dialogue') as HTMLElement;
+    if (bossWrap && bossEl) {
+      bossEl.textContent = `"${content.bossDialogue}"`;
+      bossWrap.style.display = '';
+    }
+
+    if (statusEl) { statusEl.textContent = '✨ Contenido generado por Gemini AI'; statusEl.style.color = '#c8922a'; }
   }
 
   // ── Preview: mini-mapa + roster + info ───────────────────────────────────
@@ -234,6 +284,12 @@ export class AIModesPage {
   private showPreview(cfg: AILevelConfig): void {
     const panel = this.container.querySelector('#preview-panel') as HTMLElement;
     panel.style.display = '';
+
+    // Ocultar contenido Gemini anterior mientras carga el nuevo
+    const bossWrap = this.container.querySelector('#prev-boss-wrap') as HTMLElement;
+    const statusEl = this.container.querySelector('#prev-gemini-status') as HTMLElement;
+    if (bossWrap) bossWrap.style.display = 'none';
+    if (statusEl) statusEl.style.display = 'none';
 
     // Texto del nivel
     const modeInfo  = MODES.find(m => m.id === cfg.mode)!;
@@ -378,7 +434,7 @@ export class AIModesPage {
 
     import('./GamePage').then(({ GamePage }) => {
       const app = document.getElementById('app') ?? this.container;
-      new GamePage().render(app, cfg.state, undefined, label, cfg.mapImagePath);
+      new GamePage().render(app, cfg.state, undefined, label, cfg.mapImagePath, cfg.aiContent);
     });
   }
 }

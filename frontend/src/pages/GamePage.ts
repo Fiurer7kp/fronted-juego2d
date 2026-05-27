@@ -139,6 +139,9 @@ export class GamePage {
   private useProceduralMap = false;
   private aiLevelLabel = '';
   private aiMapImagePath?: string;
+  private aiBossDialogue?: string;
+  private aiVictoryMessage?: string;
+  private aiDefeatMessage?: string;
 
   private selectedUnit:   Unit | null = null;
   private reachableTiles: Position[]  = [];
@@ -204,12 +207,16 @@ export class GamePage {
     levelId?: string,
     aiLabel?: string,
     aiMapImage?: string,
+    aiContent?: { bossDialogue?: string; victoryMessage?: string; defeatMessage?: string },
   ): Promise<void> {
     this.container = container;
     this.levelId   = levelId;
-    this.aiLevelLabel     = aiLabel ?? '';
-    this.useProceduralMap = !levelId; // sin levelId → renderiza con colores de terreno
-    this.aiMapImagePath   = aiMapImage;
+    this.aiLevelLabel      = aiLabel ?? '';
+    this.useProceduralMap  = !levelId;
+    this.aiMapImagePath    = aiMapImage;
+    this.aiBossDialogue    = aiContent?.bossDialogue;
+    this.aiVictoryMessage  = aiContent?.victoryMessage;
+    this.aiDefeatMessage   = aiContent?.defeatMessage;
 
     container.innerHTML = this.buildHTML();
     this.canvas = container.querySelector('#game-canvas') as HTMLCanvasElement;
@@ -1762,7 +1769,14 @@ export class GamePage {
   private async localEnemyTurn(): Promise<void> {
     this.gameState.currentPhase = 'ENEMY';
     this.draw();
-    this.msg('Fase enemiga — ¡Los enemigos atacan!');
+
+    if (this.aiBossDialogue && this.gameState.turnNumber === 1) {
+      const boss = this.gameState.units.find(u => u.alive && u.team === 'enemy');
+      this.msg(`${boss?.name ?? 'Enemigo'}: "${this.aiBossDialogue}"`);
+      this.aiBossDialogue = undefined; // mostrar solo una vez
+    } else {
+      this.msg('Fase enemiga — ¡Los enemigos atacan!');
+    }
     await this.delay(600);
 
     // Ordenar: agresivos primero, defensivos al final
@@ -1864,8 +1878,8 @@ export class GamePage {
   private checkWin(): void {
     const playerAlive = this.gameState.units.some(u => u.alive && u.team === 'player');
     const enemyAlive  = this.gameState.units.some(u => u.alive && u.team === 'enemy');
-    if (!enemyAlive)  this.msg('🏆 ¡VICTORIA! Todos los enemigos derrotados.');
-    if (!playerAlive) this.msg('💀 DERROTA. Todas tus unidades han caído.');
+    if (!enemyAlive)  this.msg(`🏆 ${this.aiVictoryMessage ?? '¡VICTORIA! Todos los enemigos derrotados.'}`);
+    if (!playerAlive) this.msg(`💀 ${this.aiDefeatMessage ?? 'DERROTA. Todas tus unidades han caído.'}`);
   }
 
   private delay(ms: number): Promise<void> {
