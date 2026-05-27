@@ -249,11 +249,10 @@ export class AIModesPage {
     const statusEl = this.container.querySelector('#prev-gemini-status') as HTMLElement;
     if (statusEl) { statusEl.style.display = ''; statusEl.textContent = '🤖 Consultando Gemini AI…'; }
 
-    const enemyClasses = cfg.state.units
-      .filter(u => u.team === 'enemy')
-      .map(u => u.unitClass);
+    const enemyClasses  = cfg.state.units.filter(u => u.team === 'enemy').map(u => u.unitClass);
+    const playerClasses = cfg.state.units.filter(u => u.team === 'player').map(u => u.unitClass);
 
-    const content = await GeminiService.generateLevelContent(cfg.mode, cfg.difficulty, enemyClasses);
+    const content = await GeminiService.generateLevelContent(cfg.mode, cfg.difficulty, enemyClasses, playerClasses);
 
     if (!content) {
       if (statusEl) statusEl.style.display = 'none';

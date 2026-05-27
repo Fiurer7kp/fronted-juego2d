@@ -8,6 +8,8 @@ export interface AILevelContent {
   description:    string;
   objective:      string;
   bossDialogue:   string;
+  bossDeathLine:  string;
+  attackTaunts:   string[];   // 3 frases cortas para turnos enemigos
   victoryMessage: string;
   defeatMessage:  string;
 }
@@ -28,6 +30,7 @@ export const GeminiService = {
     mode: GameMode,
     difficulty: Difficulty,
     enemyClasses: string[],
+    playerClasses: string[],
   ): Promise<AILevelContent | null> {
     if (!API_KEY || API_KEY === 'tu_api_key_aqui') return null;
 
@@ -36,17 +39,24 @@ export const GeminiService = {
 Genera contenido dramático y épico para un nivel con estos parámetros:
 - Tipo de batalla: ${MODE_NAMES[mode]}
 - Dificultad: ${DIFF_LABELS[difficulty]} (${difficulty}/5)
-- Clases enemigas presentes: ${enemyClasses.join(', ')}
+- Clases enemigas: ${enemyClasses.join(', ')}
 - Clase del jefe enemigo: ${bossClass}
+- Clases del jugador: ${playerClasses.join(', ')}
 
-Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones, exactamente con este formato:
+Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones extra:
 {
   "levelName": "nombre épico del nivel en español (máximo 5 palabras)",
-  "description": "descripción dramática en 1-2 oraciones (máximo 25 palabras)",
-  "objective": "objetivo del nivel comenzando con un verbo imperativo (máximo 8 palabras)",
-  "bossDialogue": "frase amenazante del jefe enemigo al comenzar el nivel (máximo 15 palabras)",
-  "victoryMessage": "mensaje épico de victoria en 1 oración (máximo 12 palabras)",
-  "defeatMessage": "mensaje dramático de derrota en 1 oración (máximo 12 palabras)"
+  "description": "descripción narrativa dramática, 1-2 oraciones (máximo 30 palabras)",
+  "objective": "objetivo comenzando con verbo imperativo (máximo 8 palabras)",
+  "bossDialogue": "frase amenazante del jefe al inicio de la batalla (máximo 15 palabras)",
+  "bossDeathLine": "última frase dramática del jefe al ser derrotado (máximo 12 palabras)",
+  "attackTaunts": [
+    "frase corta de burla al atacar #1 (máximo 8 palabras)",
+    "frase corta de burla al atacar #2 (máximo 8 palabras)",
+    "frase corta de burla al atacar #3 (máximo 8 palabras)"
+  ],
+  "victoryMessage": "mensaje épico de victoria (máximo 12 palabras)",
+  "defeatMessage": "mensaje dramático de derrota (máximo 12 palabras)"
 }`;
 
     try {
@@ -55,7 +65,7 @@ Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones, exact
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.9, maxOutputTokens: 300 },
+          generationConfig: { temperature: 0.9, maxOutputTokens: 400 },
         }),
       });
 
@@ -63,7 +73,9 @@ Responde ÚNICAMENTE con un JSON válido, sin markdown, sin explicaciones, exact
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(clean) as AILevelContent;
+      const parsed = JSON.parse(clean) as AILevelContent;
+      if (!Array.isArray(parsed.attackTaunts)) parsed.attackTaunts = [];
+      return parsed;
     } catch {
       return null;
     }

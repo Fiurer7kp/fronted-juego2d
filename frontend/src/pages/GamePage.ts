@@ -2,6 +2,7 @@ import {
   GameService, GameState, Unit, Position, CombatPreview, EnemyTurnResult, CombatResult, Weapon
 } from '../services/GameService';
 import { AudioManager } from '../services/AudioManager';
+import type { AILevelContent } from '../services/GeminiService';
 
 // ── Constantes del mapa ────────────────────────────────────────────────────────
 const COLS = 20, ROWS = 15, TILE = 66;
@@ -140,8 +141,11 @@ export class GamePage {
   private aiLevelLabel = '';
   private aiMapImagePath?: string;
   private aiBossDialogue?: string;
+  private aiBossDeathLine?: string;
+  private aiAttackTaunts: string[] = [];
   private aiVictoryMessage?: string;
   private aiDefeatMessage?: string;
+  private aiBossId?: string;       // id del primer enemigo (jefe)
 
   private selectedUnit:   Unit | null = null;
   private reachableTiles: Position[]  = [];
@@ -207,7 +211,7 @@ export class GamePage {
     levelId?: string,
     aiLabel?: string,
     aiMapImage?: string,
-    aiContent?: { bossDialogue?: string; victoryMessage?: string; defeatMessage?: string },
+    aiContent?: AILevelContent,
   ): Promise<void> {
     this.container = container;
     this.levelId   = levelId;
@@ -215,6 +219,8 @@ export class GamePage {
     this.useProceduralMap  = !levelId;
     this.aiMapImagePath    = aiMapImage;
     this.aiBossDialogue    = aiContent?.bossDialogue;
+    this.aiBossDeathLine   = aiContent?.bossDeathLine;
+    this.aiAttackTaunts    = aiContent?.attackTaunts ?? [];
     this.aiVictoryMessage  = aiContent?.victoryMessage;
     this.aiDefeatMessage   = aiContent?.defeatMessage;
 
@@ -232,18 +238,70 @@ export class GamePage {
       }
     }
 
+    if (this.useProceduralMap) {
+      this.aiBossId = this.gameState.units.find(u => u.team === 'enemy')?.id;
+    }
+
     await Promise.all([this.loadMap(), this.loadChars()]);
     AudioManager.playLevelMusic(levelId);
 
-    // Centrar cámara en la primera unidad del jugador al iniciar
     const firstPlayer = this.gameState.units.find(u => u.team === 'player' && u.alive);
     if (firstPlayer) {
       this.centerCameraOn(firstPlayer.position);
-      this.camera = { ...this.cameraTgt }; // sin animación al inicio
+      this.camera = { ...this.cameraTgt };
     }
 
     this.draw();
     this.bindEvents();
+
+    // Pantalla de intro dramática si hay contenido de Gemini
+    if (this.useProceduralMap && (this.aiLevelLabel || this.aiBossDialogue)) {
+      await this.showBattleIntro();
+    }
+  }
+
+  private showBattleIntro(): Promise<void> {
+    return new Promise(resolve => {
+      const ovl = document.createElement('div');
+      ovl.style.cssText = `
+        position:fixed;inset:0;z-index:9999;
+        background:rgba(0,0,0,0);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        transition:background 0.5s ease;
+        font-family:'serif';
+        cursor:pointer;
+      `;
+
+      const label = this.aiLevelLabel.replace(/^[^ ]+ · /, '').replace(/ · ★+$/, '').replace(/★+$/, '').trim();
+      const dialogue = this.aiBossDialogue ? `"${this.aiBossDialogue}"` : '';
+
+      ovl.innerHTML = `
+        <div style="text-align:center;max-width:600px;padding:40px;opacity:0;transform:translateY(20px);transition:all 0.6s ease 0.3s;" id="intro-content">
+          <div style="font-size:0.7rem;color:#c8922a;letter-spacing:6px;margin-bottom:18px;">— ASHEN CROWN —</div>
+          <div style="font-size:2.2rem;font-weight:bold;color:#f0e0c0;letter-spacing:3px;line-height:1.2;margin-bottom:16px;text-shadow:0 0 30px rgba(200,146,42,0.5);">${label || 'BATALLA'}</div>
+          <div style="width:60px;height:1px;background:linear-gradient(90deg,transparent,#c8922a,transparent);margin:0 auto 20px;"></div>
+          ${dialogue ? `<div style="font-size:1rem;color:#d4a060;font-style:italic;line-height:1.7;margin-bottom:28px;">${dialogue}</div>` : ''}
+          <div style="font-size:0.65rem;color:#555;letter-spacing:4px;margin-top:10px;">TOCA PARA COMENZAR</div>
+        </div>
+      `;
+
+      document.body.appendChild(ovl);
+      requestAnimationFrame(() => {
+        ovl.style.background = 'rgba(0,0,0,0.88)';
+        const content = ovl.querySelector('#intro-content') as HTMLElement;
+        if (content) { content.style.opacity = '1'; content.style.transform = 'translateY(0)'; }
+      });
+
+      const dismiss = () => {
+        ovl.style.transition = 'opacity 0.4s ease';
+        ovl.style.opacity = '0';
+        setTimeout(() => { ovl.remove(); resolve(); }, 400);
+      };
+
+      ovl.addEventListener('click', dismiss);
+      // Auto-dismiss después de 5 segundos si no hace click
+      setTimeout(dismiss, 5000);
+    });
   }
 
   // ── Calcula el tamaño de pantalla óptimo para el canvas ───────────────────
@@ -1744,11 +1802,22 @@ export class GamePage {
     const { defDefeated, atkDefeated } = await this.executeLocalCombatRounds(attacker, defender);
     if (defDefeated || atkDefeated) { AudioManager.playSfx('death'); await this.delay(350); }
     await this.closeBattleScreen();
-    if (defDefeated) { await this.deathAnimation(defender); defender.alive = false; }
-    if (atkDefeated) { await this.deathAnimation(attacker); attacker.alive = false; }
-    if (defDefeated)      this.msg(`¡${defender.name} derrotado!`);
-    else if (atkDefeated) this.msg(`¡${attacker.name} fue derrotado!`);
-    else                  this.msg(`${attacker.name} atacó a ${defender.name}.`);
+    if (defDefeated) {
+      await this.deathAnimation(defender);
+      defender.alive = false;
+      if (this.aiBossDeathLine && defender.id === this.aiBossId) {
+        this.msg(`${defender.name}: "${this.aiBossDeathLine}"`);
+        this.aiBossDeathLine = undefined;
+      } else {
+        this.msg(`¡${defender.name} derrotado!`);
+      }
+    } else if (atkDefeated) {
+      await this.deathAnimation(attacker);
+      attacker.alive = false;
+      this.msg(`¡${attacker.name} fue derrotado!`);
+    } else {
+      this.msg(`${attacker.name} atacó a ${defender.name}.`);
+    }
   }
 
   private findBestMoveFor(unit: Unit, target: Unit): Position | null {
@@ -1831,7 +1900,10 @@ export class GamePage {
       // Atacar si está en rango
       const dAfter = dist(enemy.position, target.position);
       if (dAfter >= wMin && dAfter <= wMax && target.alive) {
-        this.msg(`${enemy.name} ataca a ${target.name}!`);
+        const taunt = this.aiAttackTaunts.length > 0
+          ? this.aiAttackTaunts[Math.floor(Math.random() * this.aiAttackTaunts.length)]
+          : null;
+        this.msg(taunt ? `${enemy.name}: "${taunt}"` : `${enemy.name} ataca a ${target.name}!`);
         await this.localAttack(enemy, target);
       }
 
